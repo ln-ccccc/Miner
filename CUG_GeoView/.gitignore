@@ -1,0 +1,11 @@
+!backend/model/.gitkeep
+backend/model/*
+.uuid
+backend/static/*
+backend/model/**/*.zip
+backend/model/**/*.pdiparams
+offline_package
+../CUG_GeoView(1)/
+../CUG_GeoView.zip
+../mine.zip
+*.jp2git
