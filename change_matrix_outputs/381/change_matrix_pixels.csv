@@ -1,0 +1,7 @@
+﻿,T2_grassland,T2_forest,T2_building,T2_road,T2_bareground,T2_water
+T1_grassland,59235,80750,13023,1421,12810,235
+T1_forest,2841,299072,6485,328,3498,25
+T1_building,9412,16798,87209,792,4705,0
+T1_road,1302,11133,4904,15654,72,110
+T1_bareground,18644,14723,242,0,8627,0
+T1_water,0,273,81,0,0,4176
