@@ -18,7 +18,7 @@
         <span class="role">管理员</span>
       </div>
       <button class="system-btn" @click="goToGeoView">
-        <span>🌍 GeoView 遥感平台</span>
+        <span>解译平台</span>
         <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </button>
     </div>
