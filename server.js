@@ -16,6 +16,9 @@ const port = process.env.PORT ? Number(process.env.PORT) : 8000;
 app.use(cors());
 app.use(express.json());
 
+const changeMatrixStaticDir = path.resolve(process.cwd(), 'change_matrix_outputs');
+app.use('/change-matrix-outputs', express.static(changeMatrixStaticDir));
+
 // In-memory data storage
 let minesData = []; // Array of GeoJSON features
 let ndviData = {};  // Object mapping FID -> Array of {year, value}
@@ -423,6 +426,55 @@ app.get('/api/mines/indices', (req, res) => {
     ndwi: { data: ndwiRaw, ...ndwiStats },
     ndsi: { data: ndsiRaw, ...ndsiStats }
   });
+});
+
+// Get Change Matrix Data
+app.get('/api/mines/change-matrix', (req, res) => {
+  const { fid } = req.query;
+  if (!fid) return res.status(400).json({ error: 'Missing FID parameter' });
+
+  const csvPath = path.resolve(process.cwd(), 'change_matrix_outputs', fid, 'change_matrix_percent_rownorm.csv');
+  const dirPath = path.resolve(process.cwd(), 'change_matrix_outputs', fid);
+  
+  if (fs.existsSync(csvPath)) {
+    try {
+      const content = fs.readFileSync(csvPath, 'utf-8');
+      // Simple CSV parsing for this specific format
+      const lines = content.trim().split('\n');
+      if (lines.length === 0) return res.status(404).json({ error: 'Empty matrix' });
+
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^\uFEFF/, '')); // Remove BOM if present
+      const matrix = [];
+      
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(',');
+        const rowLabel = parts[0].trim();
+        const rowValues = parts.slice(1).map(v => Number(v));
+        matrix.push({ label: rowLabel, values: rowValues });
+      }
+
+      const newImageName = `${fid}_new.png`;
+      const oldImageName = `${fid}_old.png`;
+      const baseUrl = `${req.protocol}://${req.get('host')}/change-matrix-outputs/${fid}`;
+      const newImage = fs.existsSync(path.join(dirPath, newImageName)) ? `${baseUrl}/${newImageName}` : null;
+      const oldImage = fs.existsSync(path.join(dirPath, oldImageName)) ? `${baseUrl}/${oldImageName}` : null;
+
+      res.json({
+        fid: Number(fid),
+        headers: headers.slice(1), // First column is empty or row label header
+        matrix: matrix,
+        images: {
+          new: newImage,
+          old: oldImage
+        }
+      });
+    } catch (e) {
+      console.error(`Failed to read change matrix for FID ${fid}:`, e);
+      res.status(500).json({ error: 'Failed to read matrix file' });
+    }
+  } else {
+    res.status(404).json({ error: 'Change matrix not found for this FID' });
+  }
 });
 
 // Get NDVI data and trend (Legacy/Specific)

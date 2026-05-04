@@ -2,6 +2,9 @@ import { ref, computed } from 'vue';
 import axios from 'axios';
 
 export function useMineData() {
+  const apiBase = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+  const apiUrl = (path) => (apiBase ? `${apiBase}${path}` : path);
+
   const allMinesData = ref([]);
   const filteredMinesData = ref([]);
   
@@ -32,10 +35,12 @@ export function useMineData() {
     ndsi: { mean: 0, trend: 0, mk_trend: '暂无', data: [] }
   });
 
+  const mineChangeMatrix = ref(null);
+
   const loadData = async () => {
     try {
       // 1. Fetch Stats
-      const statsRes = await axios.get('http://localhost:8000/api/stats');
+      const statsRes = await axios.get(apiUrl('/api/stats'));
       const stats = statsRes.data;
       mineTotal.value = stats.mineTotal;
       overviewArea.value = stats.mineAreaTotal;
@@ -46,7 +51,7 @@ export function useMineData() {
       landTypeList.value = stats.landTypeList || [];
       
       // 2. Fetch GeoJSON
-      const geoRes = await axios.get('http://localhost:8000/api/geojson');
+      const geoRes = await axios.get(apiUrl('/api/geojson'));
       if (geoRes.data && geoRes.data.features) {
         allMinesData.value = geoRes.data.features;
         
@@ -87,10 +92,22 @@ export function useMineData() {
       // If we want search to filter the map view:
       let searchMatch = true;
       if (searchMineId.value) {
-         const q = searchMineId.value.toLowerCase();
-         const idMatch = String(p.FID_1) === q;
-         const nameMatch = p.mine_name && p.mine_name.includes(q);
-         searchMatch = idMatch || nameMatch;
+         const q = String(searchMineId.value).trim().toLowerCase();
+         const candidates = [
+           p.FID_1,
+           p.KZ,
+           p.ZTBH,
+           p.CKZH,
+           p.mine_name,
+           p.name,
+           p.GGKSMC,
+           p.SBKSMC,
+           p.ZLKSMC,
+           p.KSWZ
+         ]
+           .filter(Boolean)
+           .map(v => String(v).toLowerCase());
+         searchMatch = candidates.some(v => v.includes(q));
       }
 
       return cityMatch && methodMatch && statusMatch && (searchMineId.value ? searchMatch : true);
@@ -107,11 +124,25 @@ export function useMineData() {
 
   const fetchIndices = async (fid) => {
     try {
-      const res = await axios.get(`http://localhost:8000/api/mines/indices?fid=${fid}`);
+      const res = await axios.get(apiUrl(`/api/mines/indices?fid=${fid}`));
       mineIndices.value = res.data;
+      
+      // Also fetch change matrix
+      fetchChangeMatrix(fid);
     } catch (e) {
       console.warn("No indices data for FID:", fid);
       mineIndices.value = { ndvi: {}, ndbi: {}, ndwi: {}, ndsi: {} };
+      mineChangeMatrix.value = null;
+    }
+  };
+
+  const fetchChangeMatrix = async (fid) => {
+    try {
+      const res = await axios.get(apiUrl(`/api/mines/change-matrix?fid=${fid}`));
+      mineChangeMatrix.value = res.data;
+    } catch (e) {
+      console.warn("No change matrix for FID:", fid);
+      mineChangeMatrix.value = null;
     }
   };
   
@@ -150,10 +181,12 @@ export function useMineData() {
     miningMethodList, // Add this
     landTypeList,
     mineIndices,
+    mineChangeMatrix,
     loadData,
     applyFilters,
     resetFilters,
     fetchIndices,
+    fetchChangeMatrix,
     formatMaybeNumber,
     formatTrend,
     getTrendClass
