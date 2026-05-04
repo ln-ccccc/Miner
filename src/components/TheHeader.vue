@@ -15,8 +15,10 @@
     <div class="header-right">
       <div class="time-widget">{{ currentDate }} {{ currentTime }}</div>
       <div class="user-profile">
-        <span class="role">管理员</span>
+        <span class="role">{{ userName || '管理员' }}</span>
       </div>
+      <button class="icon-btn" @click="$emit('open-settings')" title="功能设置">⚙️</button>
+      <button class="icon-btn" @click="$emit('logout')" title="退出登录">⎋</button>
       <button class="system-btn" @click="goToGeoView">
         <span>解译平台</span>
         <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -26,7 +28,7 @@
 </template>
 
 <script setup>
-import { defineProps } from 'vue';
+import { defineProps, defineEmits } from 'vue';
 
 const props = defineProps({
   weatherIcon: String,
@@ -34,8 +36,11 @@ const props = defineProps({
   airQuality: String,
   currentDate: String,
   currentTime: String,
-  getAqiClass: Function
+  getAqiClass: Function,
+  userName: String
 });
+
+defineEmits(['open-settings', 'logout']);
 
 const goToGeoView = () => {
   let base = import.meta.env.VITE_GEOVIEW_URL || 'http://localhost:3000/'
@@ -89,4 +94,19 @@ const goToGeoView = () => {
   transition: transform 0.2s;
 }
 .system-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(9, 132, 227, 0.4); }
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: #e0f7ff;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  border-color: rgba(78, 205, 196, 0.35);
+  background: rgba(78, 205, 196, 0.12);
+}
 </style>

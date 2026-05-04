@@ -1,5 +1,7 @@
 <template>
-  <div class="dashboard">
+  <LoginView v-if="!isAuthenticated" :onLogin="handleLogin" />
+
+  <div v-else class="dashboard">
     <!-- 顶部导航栏 -->
     <TheHeader 
       :weatherIcon="weatherIcon"
@@ -8,6 +10,9 @@
       :currentDate="currentDate"
       :currentTime="currentTime"
       :getAqiClass="getAqiClass"
+      :userName="userName"
+      @open-settings="activeNavKey = 'settings'"
+      @logout="handleLogout"
     />
 
     <!-- 主体内容 -->
@@ -26,10 +31,14 @@
         :restorationMethodList="restorationMethodList"
         :cityOptions="cityOptions"
         :miningMethodOptions="miningMethodOptions"
+        :activeNavKey="activeNavKey"
+        :uiSettings="uiSettings"
         @toggle="leftCollapsed = !leftCollapsed"
         @apply-filters="applyFilters"
         @reset-filters="resetFilters"
         @search="performSearch"
+        @navigate="handleNavigate"
+        @update-settings="updateUiSettings"
       />
 
       <!-- 中间地图区域 -->
@@ -38,7 +47,11 @@
         :minesData="filteredMinesData"
         :leftCollapsed="leftCollapsed"
         :rightCollapsed="rightCollapsed"
+        :defaultLayer="uiSettings.defaultLayer"
+        :showLegend="uiSettings.showLegend"
+        :autoFitBounds="uiSettings.autoFitBounds"
         @select-mine="handleSelectMine"
+        @layer-change="updateUiSettings({ defaultLayer: $event })"
       />
 
       <!-- 右侧边栏 -->
@@ -69,9 +82,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref, nextTick } from 'vue';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { onMounted, ref, nextTick, watch } from 'vue';
 
 // Components
 import TheHeader from './components/TheHeader.vue';
@@ -79,10 +90,12 @@ import LeftSidebar from './components/LeftSidebar.vue';
 import RightSidebar from './components/RightSidebar.vue';
 import MapContainer from './components/MapContainer.vue';
 import MineDetailModal from './components/MineDetailModal.vue';
+import LoginView from './components/LoginView.vue';
 
 // Composables
 import { useWeather } from './composables/useWeather';
 import { useMineData } from './composables/useMineData';
+import { useAuth } from './composables/useAuth';
 
 // --- State ---
 const leftCollapsed = ref(false);
@@ -90,6 +103,7 @@ const rightCollapsed = ref(false);
 const showMineDetail = ref(false);
 const selectedMine = ref({});
 const selectedTab = ref('NDVI');
+const activeNavKey = ref('dashboard');
 
 const mapContainerRef = ref(null);
 
@@ -97,6 +111,34 @@ const mapContainerRef = ref(null);
 const { 
   currentDate, currentTime, temperature, weatherIcon, airQuality, getAqiClass, fetchRealtimeEnvironmentAt 
 } = useWeather();
+
+const { isAuthenticated, userName, initAuth, login, logout } = useAuth();
+
+const UI_SETTINGS_KEY = 'mine_ui_settings_v1';
+const uiSettings = ref({
+  defaultLayer: 'satellite',
+  showLegend: true,
+  autoFitBounds: true
+});
+
+const loadUiSettings = () => {
+  try {
+    const raw = localStorage.getItem(UI_SETTINGS_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+    uiSettings.value = {
+      defaultLayer: parsed.defaultLayer ?? 'satellite',
+      showLegend: parsed.showLegend ?? true,
+      autoFitBounds: parsed.autoFitBounds ?? true
+    };
+  } catch {}
+};
+
+const updateUiSettings = (next) => {
+  uiSettings.value = { ...uiSettings.value, ...next };
+  localStorage.setItem(UI_SETTINGS_KEY, JSON.stringify(uiSettings.value));
+};
 
 const {
   allMinesData,
@@ -133,8 +175,22 @@ const performSearch = () => {
   // Find target in all data
   const target = allMinesData.value.find(f => {
     const p = f.properties;
-    const q = searchMineId.value.toLowerCase();
-    return String(p.FID_1) === q || (p.mine_name && p.mine_name.includes(q));
+    const q = String(searchMineId.value).trim().toLowerCase();
+    const candidates = [
+      p.FID_1,
+      p.KZ,
+      p.ZTBH,
+      p.CKZH,
+      p.mine_name,
+      p.name,
+      p.GGKSMC,
+      p.SBKSMC,
+      p.ZLKSMC,
+      p.KSWZ
+    ]
+      .filter(Boolean)
+      .map(v => String(v).toLowerCase());
+    return candidates.some(v => v.includes(q));
   });
 
   if (target) {
@@ -158,9 +214,16 @@ const performSearch = () => {
 
 const handleSelectMine = async ({ feature, center }) => {
   const p = feature.properties;
+  const displayName =
+    p.mine_name ||
+    p.name ||
+    p.GGKSMC ||
+    p.SBKSMC ||
+    p.ZLKSMC ||
+    (p.FID_1 ? `矿山 ${p.FID_1}` : '矿山详情');
   selectedMine.value = {
     mine_id: p.FID_1,
-    name: p.mine_name || p.name || `矿山 ${p.FID_1}`,
+    name: displayName,
     area: p.area || p.TBTYMJ,
     status_raw: p.HFZLQK,
     status_normalized: p.status_normalized,
@@ -177,17 +240,46 @@ const handleSelectMine = async ({ feature, center }) => {
   fetchRealtimeEnvironmentAt(center.lat, center.lng);
 };
 
+const handleNavigate = (key) => {
+  if (key === 'about') {
+    alert('矿山生态修复智能监测平台\n\n用于矿山治理状态与生态指标的可视化监测、筛选查询与统计分析。');
+    return;
+  }
+  activeNavKey.value = key;
+};
+
+const handleLogin = ({ user, password }) => {
+  return login({ user, password });
+};
+
+const handleLogout = () => {
+  logout();
+  activeNavKey.value = 'dashboard';
+  showMineDetail.value = false;
+};
+
 // --- Lifecycle ---
 onMounted(() => {
-  loadData();
-  
-  // Initial weather for a default center (e.g. Dali)
-  fetchRealtimeEnvironmentAt(25.6, 100.2);
-  
-  window.addEventListener('resize', () => {
-    if (mapContainerRef.value) mapContainerRef.value.invalidateSize();
-  });
+  initAuth();
+  loadUiSettings();
 });
+
+const dataInitialized = ref(false);
+
+watch(
+  () => isAuthenticated.value,
+  (authed) => {
+    if (!authed) return;
+    if (dataInitialized.value) return;
+    dataInitialized.value = true;
+    loadData();
+    fetchRealtimeEnvironmentAt(25.6, 100.2);
+    window.addEventListener('resize', () => {
+      if (mapContainerRef.value) mapContainerRef.value.invalidateSize();
+    });
+  },
+  { immediate: true }
+);
 </script>
 
 <style scoped>

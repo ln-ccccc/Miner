@@ -1,13 +1,45 @@
 <template>
   <aside class="sidebar left-sidebar" :class="{ 'collapsed': collapsed }">
     <div class="sidebar-header">
-      <h2>数据概览</h2>
+      <h2>{{ headerTitle }}</h2>
       <button class="collapse-btn" @click="$emit('toggle')">
         {{ collapsed ? '➤' : '◀' }}
       </button>
     </div>
     
     <div class="sidebar-content" v-show="!collapsed">
+      <div class="nav-panel glass-panel">
+        <div class="panel-header">
+          <h3>主要功能模块</h3>
+          <button class="reset-btn" @click="toggleAllGroups">{{ allExpanded ? '收起' : '展开' }}</button>
+        </div>
+
+        <div class="nav-group" v-for="group in menuGroups" :key="group.key">
+          <button class="group-title" @click="toggleGroup(group.key)">
+            <span class="caret">{{ openGroups[group.key] ? '▾' : '▸' }}</span>
+            <span class="group-text">{{ group.label }}</span>
+          </button>
+          <div class="group-items" v-show="openGroups[group.key]">
+            <button
+              v-for="item in group.items"
+              :key="item.key"
+              class="nav-item"
+              :class="{ active: activeNavKey === item.key }"
+              @click="navigate(item.key)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <SettingsPanel
+        v-if="activeNavKey === 'settings'"
+        :settings="uiSettings"
+        @update="$emit('update-settings', $event)"
+      />
+
+      <template v-else>
       <!-- 核心指标卡片 -->
       <div class="metric-grid">
         <div class="metric-card">
@@ -80,12 +112,14 @@
           </div>
         </div>
       </div>
+      </template>
     </div>
   </aside>
 </template>
 
 <script setup>
-import { defineProps, defineEmits } from 'vue';
+import { computed, defineProps, defineEmits, reactive } from 'vue';
+import SettingsPanel from './SettingsPanel.vue';
 
 const props = defineProps({
   collapsed: Boolean,
@@ -99,7 +133,9 @@ const props = defineProps({
   filterCity: String,
   filterStatus: String,
   filterMethod: String,
-  searchMineId: String
+  searchMineId: String,
+  activeNavKey: String,
+  uiSettings: Object
 });
 
 const emit = defineEmits([
@@ -110,12 +146,69 @@ const emit = defineEmits([
   'update:searchMineId',
   'apply-filters', 
   'reset-filters', 
-  'search'
+  'search',
+  'navigate',
+  'update-settings'
 ]);
 
 const emitApply = () => emit('apply-filters');
 const emitReset = () => emit('reset-filters');
 const emitSearch = () => emit('search');
+
+const menuGroups = [
+  {
+    key: 'workbench',
+    label: '监测工作台',
+    items: [
+      { key: 'dashboard', label: '地图监测' },
+      { key: 'analysis', label: '分析统计' }
+    ]
+  },
+  {
+    key: 'data',
+    label: '数据管理',
+    items: [
+      { key: 'query', label: '筛选查询' },
+      { key: 'search', label: '矿山检索' }
+    ]
+  },
+  {
+    key: 'system',
+    label: '系统管理',
+    items: [
+      { key: 'settings', label: '功能设置' },
+      { key: 'about', label: '帮助与关于' }
+    ]
+  }
+];
+
+const openGroups = reactive({
+  workbench: true,
+  data: true,
+  system: true
+});
+
+const allExpanded = computed(() => Object.values(openGroups).every(Boolean));
+
+const toggleGroup = (key) => {
+  openGroups[key] = !openGroups[key];
+};
+
+const toggleAllGroups = () => {
+  const next = !allExpanded.value;
+  Object.keys(openGroups).forEach(k => {
+    openGroups[k] = next;
+  });
+};
+
+const navigate = (key) => {
+  emit('navigate', key);
+};
+
+const headerTitle = computed(() => {
+  if (props.activeNavKey === 'settings') return '功能设置';
+  return '数据概览';
+});
 </script>
 
 <style scoped>
@@ -168,6 +261,63 @@ const emitSearch = () => emit('search');
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;
   padding: 12px;
+}
+
+.nav-panel {
+  padding: 12px;
+}
+
+.nav-group {
+  margin-top: 10px;
+}
+
+.group-title {
+  width: 100%;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.caret {
+  width: 14px;
+  text-align: center;
+  color: #4ecdc4;
+}
+
+.group-text {
+  font-size: 12px;
+}
+
+.group-items {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 22px;
+}
+
+.nav-item {
+  width: 100%;
+  text-align: left;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(224, 247, 255, 0.8);
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.nav-item.active {
+  background: rgba(78, 205, 196, 0.2);
+  border-color: rgba(78, 205, 196, 0.35);
+  color: #e0f7ff;
 }
 
 .panel-header {

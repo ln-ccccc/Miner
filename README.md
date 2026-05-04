@@ -59,9 +59,23 @@ npm run dev -- --host
 ```
 
 前端会从后端读取数据：
-- `GET http://localhost:8000/api/geojson` 返回矿山 GeoJSON 集合
-- `GET http://localhost:8000/api/mines/ndvi?fid={FID_1}` 返回该矿山历年 NDVI 统计
-- `GET http://localhost:8000/api/mines/search?q={FID_1 或 名称片段}` 按编号/名称搜索
+- `GET /api/geojson` 返回矿山 GeoJSON 集合
+- `GET /api/mines/ndvi?fid={FID_1}` 返回该矿山历年 NDVI 统计
+- `GET /api/mines/search?q={FID_1 或 名称片段}` 按编号/名称搜索
+
+说明：
+- 开发环境默认通过 Vite 代理将 `/api` 与 `/change-matrix-outputs` 转发到后端 `http://localhost:8000`，因此请确保后端已启动。
+- 也可通过环境变量 `VITE_API_BASE` 指定后端地址（如 `http://127.0.0.1:8000`），未设置时默认走同源 `/api`。
+
+### 登录
+
+前端新增登录页，默认账号：
+- 账号：admin
+- 密码：admin123
+
+### 使用手册（图文）
+
+见 [docs/使用手册.md](docs/使用手册.md)。
 
 ### 可选：导入 NDVI 数据（Excel）
 项目根目录已有 `NDVI_2year.xlsx`，可按需导入到 MySQL：

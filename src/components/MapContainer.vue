@@ -10,7 +10,7 @@
     </div>
 
     <!-- 悬浮图例 -->
-    <div class="map-legend glass-panel" :class="{ 'shifted-left': leftCollapsed }">
+    <div v-if="legendVisible" class="map-legend glass-panel" :class="{ 'shifted-left': leftCollapsed }">
       <div class="legend-item"><span class="dot treated"></span> 已治理</div>
       <div class="legend-item"><span class="dot untreated"></span> 未治理</div>
       <div class="legend-item"><span class="dot unknown"></span> 未知/其他</div>
@@ -19,17 +19,20 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, watch, defineProps, defineEmits, defineExpose } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch, defineProps, defineEmits, defineExpose } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 const props = defineProps({
   minesData: Array,
   leftCollapsed: Boolean,
-  rightCollapsed: Boolean
+  rightCollapsed: Boolean,
+  defaultLayer: String,
+  showLegend: Boolean,
+  autoFitBounds: Boolean
 });
 
-const emit = defineEmits(['select-mine']);
+const emit = defineEmits(['select-mine', 'layer-change']);
 
 const map = ref(null);
 const mineLayer = ref(null);
@@ -37,6 +40,8 @@ const currentLayer = ref('satellite');
 const mapContainer = ref(null); // Ref for the container div
 let baseMaps = {};
 let resizeObserver = null;
+
+const legendVisible = computed(() => props.showLegend !== false);
 
 const initMap = () => {
   if (!mapContainer.value) return;
@@ -49,7 +54,9 @@ const initMap = () => {
     terrain: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 })
   };
   
-  baseMaps[currentLayer.value].addTo(map.value);
+  const initial = props.defaultLayer && baseMaps[props.defaultLayer] ? props.defaultLayer : currentLayer.value;
+  currentLayer.value = initial;
+  baseMaps[initial].addTo(map.value);
 };
 
 const switchLayer = (layer) => {
@@ -58,6 +65,7 @@ const switchLayer = (layer) => {
   
   Object.values(baseMaps).forEach(l => map.value.removeLayer(l));
   baseMaps[layer].addTo(map.value);
+  emit('layer-change', layer);
 };
 
 const renderMapMarkers = () => {
@@ -83,7 +91,14 @@ const renderMapMarkers = () => {
     },
     onEachFeature: (feature, layer) => {
       // Tooltip
-      const name = feature.properties.mine_name || feature.properties.name || `ID: ${feature.properties.FID_1}`;
+      const p = feature.properties || {};
+      const name =
+        p.mine_name ||
+        p.name ||
+        p.GGKSMC ||
+        p.SBKSMC ||
+        p.ZLKSMC ||
+        (p.FID_1 ? `ID: ${p.FID_1}` : '矿山');
       layer.bindTooltip(name, { direction: 'top', className: 'map-tooltip' });
       
       // Click
@@ -103,7 +118,7 @@ const renderMapMarkers = () => {
     }
   }).addTo(map.value);
   
-  if (props.minesData.length > 0) {
+  if (props.autoFitBounds !== false && props.minesData.length > 0) {
     try {
       map.value.fitBounds(mineLayer.value.getBounds(), { padding: [50, 50] });
     } catch(e) {}
@@ -135,6 +150,16 @@ const invalidateSize = () => {
 watch(() => props.minesData, () => {
   renderMapMarkers();
 }, { deep: true });
+
+watch(
+  () => props.defaultLayer,
+  (val) => {
+    if (!val) return;
+    if (!baseMaps[val]) return;
+    if (val === currentLayer.value) return;
+    switchLayer(val);
+  }
+);
 
 onMounted(() => {
   initMap();
